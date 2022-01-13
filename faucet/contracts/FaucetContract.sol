@@ -1,24 +1,23 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.4.22 <0.9.0;
 
-contract Faucet{
+import "./Owned.sol";
+import "./Logger.sol";
+import "./IFaucet.sol";
+
+contract Faucet is Owned, Logger, IFaucet{
     //storage variables
 
     // address payable [] public funders;
     uint public numberOfFunders;
     mapping(uint => address) public fundersList;
     mapping(address => bool) public funders;
-    address public owner;
-
-    constructor(){
-        owner = msg.sender;
-    }
-
+    
 
     receive() external payable{
     }
 
-    function addFunds() public payable {
+    function addFunds() public payable override {
         
         address funder = msg.sender;
         if (!funders[funder]){
@@ -37,11 +36,7 @@ contract Faucet{
         _;
     }
 
-    modifier onlyAdmin {
-        require(msg.sender == owner, "You do not have privalages for this function");
-        _;
-    }
-
+    
     function getFunders(uint index) public view returns(address){
         return fundersList[index];
     }
@@ -54,11 +49,17 @@ contract Faucet{
         return _funders;
     }
 
-    function withdrawFunds(uint amount) public LessThanMaximum(amount) {
+    function withdrawFunds(uint amount) public override LessThanMaximum(amount) {
         
         payable(msg.sender).transfer(amount);
-        
-       
+    }
+
+    function transferOwnerShip(address newOwner) public OnlyAdmin{
+        owner = newOwner;
+    }
+
+    function emitLog() public override pure returns(bytes32){
+        return "Hello World";
     }
 
     
