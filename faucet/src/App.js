@@ -4,10 +4,12 @@ import Web3 from "web3";
 import detectEthereumProvider from '@metamask/detect-provider';
 import {loadContract} from "./utils/load-contract";
 
+
 function App() {
 
   const [web3Api, setWeb3Api] = useState({
     provider: null,
+    isProviderLoaded: false,
     web3: null,
     contract: null,
   })
@@ -17,6 +19,8 @@ function App() {
   const [balance, setBalance] = useState(null)
 
   const [shouldReload, reload] = useState(false)
+
+  const canConnectToContract = account && web3Api.contract
 
   const reloadEffect = useCallback(() => reload(!shouldReload), [shouldReload])
 
@@ -29,10 +33,10 @@ function App() {
 
       // let provider = null;
       const provider = await detectEthereumProvider()
-      const contract = await loadContract("Faucet", provider)
+      
       const setAccountListener = provider => {
-
         provider.on("accountsChanged",_ => window.location.reload())
+        provider.on("chainChanged",_ => window.location.reload()) //called when changing networks.
         // provider.on("accountsChanged", accounts => setAccount(accounts[0]))
 
         // provider._jsonRpcConnection.events.on("notification", payload => {
@@ -43,18 +47,26 @@ function App() {
         // })
       }
 
-      
-      console.log(contract);
+      // console.log(contract);
       if (provider) {
+        const contract = await loadContract("Faucet", provider)
         setAccountListener(provider)
         // provider.request({method:"eth_requestAccounts"})
         setWeb3Api({
           web3: new Web3(provider),
           provider,
-          contract
+          contract,
+          isProviderLoaded:true
         })
       } 
       else {
+        // setWeb3Api({...web3Api, isProviderLoaded:true})
+        setWeb3Api((api) => {
+          return {
+            ...api,
+            isProviderLoaded: true
+          }
+        })
         console.error('Please install MetaMask!')
       }
 
@@ -129,27 +141,38 @@ function App() {
     <>
       <div className="faucet-wrapper">
           <div className="faucet">
-          <div className="is-flex is-align-items-center">
-            <span>
-              <strong className="mr-2">
-                Account: 
-              </strong>
-              </span>
-                {account ? 
-                  <div>{account}</div>: 
-                <button className="button is-success is-focused mr-2"
-                onClick ={async () => web3Api.provider.request({method:"eth_requestAccounts"})}
-                >Connect to Metamask</button>}
-              </div>
+          {web3Api.isProviderLoaded ?
+            <div className="is-flex is-align-items-center">
+              <span>
+                <strong className="mr-2">
+                  Account: 
+                </strong>
+                </span>
+                  {account ? 
+                    <div>{account}</div>:
+                  !web3Api.provider ?
+                  <>
+                  <div className="notification is-warning is-rounded">
+                    Wallet is not detected {` `}
+                    <a href="https://docs.metamask.io" tarket="_blank" rel="noopener noreferrer"> Install Metamask</a>
+                  </div>
+                  </> :
+                  <button className="button is-success is-focused mr-2"
+                  onClick ={async () => web3Api.provider.request({method:"eth_requestAccounts"})}
+                  >Connect to Metamask</button>}
+                </div> :
+                <span>Looking For Web3...</span>
+          }
             <div className="balance-view is-size-2 my-4">
               Current Balance: <strong>{balance}</strong> ETH
             </div>
+            {!canConnectToContract && <i className="is-block">Connect to Ganache Network</i>}
             <button className="button is-primary  mr-2"
             onClick={addFunds}
-            disabled={!account}>Donate 1eth</button>
+            disabled={!canConnectToContract}>Donate 1eth</button>
             <button className="button is-danger"
             onClick={withdrawFunds}
-            disabled={!account}>WithDraw</button>
+            disabled={!canConnectToContract}>WithDraw</button>
           </div>
       </div>
     </>
