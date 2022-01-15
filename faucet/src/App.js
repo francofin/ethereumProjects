@@ -1,15 +1,24 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import './App.css';
 import Web3 from "web3";
+import detectEthereumProvider from '@metamask/detect-provider';
+import {loadContract} from "./utils/load-contract";
 
 function App() {
 
   const [web3Api, setWeb3Api] = useState({
     provider: null,
     web3: null,
+    contract: null,
   })
 
   const [account, setAccount] = useState(null)
+
+  const [balance, setBalance] = useState(null)
+
+  const [shouldReload, reload] = useState(false)
+
+  const reloadEffect = useCallback(() => reload(!shouldReload), [shouldReload])
 
   useEffect(() => {
     const loadProvider = async () => {
@@ -18,29 +27,53 @@ function App() {
       //This api allows websites to request users accounts, read data to blockchain, 
       //sign messages, and transactions. 
 
-      let provider = null;
-      if (window.ethereum) {
-        provider = window.ethereum;
-        try{
-          // await provider.enable();
-          await provider.request({method:"eth_requestAccounts"})
-        } catch{
-          console.error("User denied account access")
-        }
-      } else if (window.web3) {
-        provider = window.web3.currentProvider;
+      // let provider = null;
+      const provider = await detectEthereumProvider()
+      const contract = await loadContract("Faucet", provider)
+      const setAccountListener = provider => {
 
-      } else if (!process.env.production) {
-        provider = new Web3.providers.HttpProvider("http://localhost:7545")
+        provider.on("accountsChanged",_ => window.location.reload())
+        // provider.on("accountsChanged", accounts => setAccount(accounts[0]))
+
+        // provider._jsonRpcConnection.events.on("notification", payload => {
+        //   const {method} = payload
+        //   if(method === "metamask_unlockStateChanged"){
+        //     setAccount(null)
+        //   }
+        // })
       }
 
-      setWeb3Api({
-        web3: new Web3(provider),
-        provider
-      })
+      
+      console.log(contract);
+      if (provider) {
+        setAccountListener(provider)
+        // provider.request({method:"eth_requestAccounts"})
+        setWeb3Api({
+          web3: new Web3(provider),
+          provider,
+          contract
+        })
+      } 
+      else {
+        console.error('Please install MetaMask!')
+      }
+
+      // if (window.ethereum) {
+      //   provider = window.ethereum;
+      //   try{
+      //     // await provider.enable();
+      //     await provider.request({method:"eth_requestAccounts"})
+      //   } catch{
+      //     console.error("User denied account access")
+      //   }
+
+
+      // setWeb3Api({
+      //   web3: new Web3(provider),
+      //   provider
+      // })
 
     }
-
     loadProvider();
   }, [])
 
@@ -57,6 +90,38 @@ function App() {
     web3Api.web3 && getAccount();
   }, [web3Api.web3])
 
+
+  useEffect(() => {
+    const loadBalance = async () => {
+      const {contract, web3} = web3Api
+      const balance = await web3.eth.getBalance(contract.address)
+      setBalance(web3.utils.fromWei(balance, "ether"))
+    }
+
+    web3Api.contract && loadBalance()
+  }, [web3Api, shouldReload])
+
+
+  const addFunds = useCallback(async () => {
+    const {contract, web3} = web3Api
+    await contract.addFunds({
+      from: account, 
+      value: web3.utils.toWei("1", "ether")
+    })
+    // window.location.reload()
+    reloadEffect()
+  }, [web3Api, account,reloadEffect])
+
+  const withdrawFunds = async () => {
+      const {contract, web3} = web3Api
+      const withdrawAmount = web3.utils.toWei("0.1", "ether")
+      await contract.withdrawFunds( withdrawAmount, {
+        from:account,
+      })
+
+      reloadEffect()
+  }
+
   // console.log(web3Api.web3);
 
 
@@ -64,20 +129,27 @@ function App() {
     <>
       <div className="faucet-wrapper">
           <div className="faucet">
+          <div className="is-flex is-align-items-center">
             <span>
-              <strong>
+              <strong className="mr-2">
                 Account: 
               </strong>
-              <h1>
-                {account ? account: "not connected"}
-              </h1>
-            </span>
-            <div className="balance-view is-size-2">
-              Current Balance: <strong>10</strong> ETH
+              </span>
+                {account ? 
+                  <div>{account}</div>: 
+                <button className="button is-success is-focused mr-2"
+                onClick ={async () => web3Api.provider.request({method:"eth_requestAccounts"})}
+                >Connect to Metamask</button>}
+              </div>
+            <div className="balance-view is-size-2 my-4">
+              Current Balance: <strong>{balance}</strong> ETH
             </div>
-            
-            <button className="button is-primary  mr-2">Donate</button>
-            <button className="button is-danger">WithDraw</button>
+            <button className="button is-primary  mr-2"
+            onClick={addFunds}
+            disabled={!account}>Donate 1eth</button>
+            <button className="button is-danger"
+            onClick={withdrawFunds}
+            disabled={!account}>WithDraw</button>
           </div>
       </div>
     </>
